@@ -38,7 +38,7 @@ function makeAsciiText(value, style, is3d) {
   return canvas.map(line => line.join('').replace(/ +$/, '')).join('\n');
 }
 
-function composeAsciiLayers(imageAscii, bannerAscii, position, clearBackground) {
+function composeAsciiLayers(imageAscii, bannerAscii, position, clearBackground, textX=50, textY=null) {
   if (!imageAscii) return bannerAscii ? `${bannerAscii}\n` : '';
   if (!bannerAscii) return imageAscii;
   const imageLines = imageAscii.replace(/\n$/, '').split('\n');
@@ -49,14 +49,15 @@ function composeAsciiLayers(imageAscii, bannerAscii, position, clearBackground) 
     [...line].forEach((char, index) => { row[start + index] = char; });
     return row;
   });
-  const startY = position === 'top' ? 1 : position === 'center' ? Math.floor((canvas.length - bannerLines.length) / 2) : canvas.length - bannerLines.length - 1;
+  const startY = textY === null ? (position === 'top' ? 1 : position === 'center' ? Math.floor((canvas.length - bannerLines.length) / 2) : canvas.length - bannerLines.length - 1) : Math.round((canvas.length-bannerLines.length)*textY/100);
   const safeY = clamp(startY, 0, Math.max(0, canvas.length - bannerLines.length));
+  const bannerWidth = Math.max(...bannerLines.map(value => value.length));
+  const blockX = Math.round(Math.max(0,width-bannerWidth)*textX/100);
   bannerLines.forEach((line, row) => {
-    const startX = Math.max(0, Math.floor((width - line.length) / 2));
+    const startX = blockX + Math.max(0,Math.floor((bannerWidth-line.length)/2));
     if (!canvas[safeY + row]) return;
     if (clearBackground) {
-      const bannerWidth = Math.max(...bannerLines.map(value => value.length));
-      const bgX = Math.max(0, Math.floor((width - bannerWidth) / 2));
+      const bgX = blockX;
       for (let x = bgX; x < Math.min(width, bgX + bannerWidth); x++) canvas[safeY + row][x] = ' ';
     }
     [...line].forEach((char, col) => { if (char !== ' ') canvas[safeY + row][startX + col] = char; });
@@ -158,6 +159,8 @@ function App() {
   const [textBgEnabled, setTextBgEnabled] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [textPosition, setTextPosition] = useState('bottom');
+  const [textX, setTextX] = useState(50);
+  const [textY, setTextY] = useState(90);
   const [textSize, setTextSize] = useState(24);
   const [text3dColor, setText3dColor] = useState('#777777');
   const [text3dDepthColor, setText3dDepthColor] = useState('#333333');
@@ -307,6 +310,8 @@ function App() {
   const duplicateSubjectLayer = id => setSubjectLayers(current => { const source=current.find(layer=>layer.id===id); return !source||current.length>=10?current:[...current,{...source,id:`${Date.now()}-${Math.random()}`,x:clamp(source.x+8,0,100),y:clamp(source.y+8,0,100)}]; });
   const removeSubjectSource = label => { setSubjectAnalysis(current=>({...current,components:current.components.filter(component=>component.label!==label)}));setSubjectLayers(current=>current.filter(layer=>layer.label!==label)); };
   const setCanvasPreset = preset => { const sizes={square:[1000,1000],portrait:[800,1200],landscape:[1200,800],wide:[1600,900]};setSubjectCanvasWidth(sizes[preset][0]);setSubjectCanvasHeight(sizes[preset][1]); };
+  const setTextPreset = position => {setTextPosition(position);setTextX(50);setTextY(position==='top'?5:position==='center'?50:95);};
+  const getLayerSize = layer => {const subject=subjectAnalysis?.components.find(component=>component.label===layer.label);if(!subject)return [0,0];const fit=Math.min(subjectCanvasWidth/subject.cutout.width*.6,subjectCanvasHeight/subject.cutout.height*.8);return [Math.round(subject.cutout.width*fit*layer.scale/100),Math.round(subject.cutout.height*fit*layer.scale/100)];};
   const saveBlob = (blob, suffix) => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `${fileName.replace(/\.[^.]+$/, '') || 'portrait'}-glypheeeeee.${suffix}`; a.click();
@@ -316,7 +321,7 @@ function App() {
   const activeTextColor = colorMode ? textColor : (background === 'dark' ? '#f1efe8' : '#151512');
   const activeTextBg = colorMode ? textBg : (background === 'dark' ? '#151512' : '#f8f7f2');
   const hasOutput = Boolean(ascii || asciiText);
-  const composedAscii = composeAsciiLayers(ascii, asciiText, textPosition, textBgEnabled);
+  const composedAscii = composeAsciiLayers(ascii, asciiText, textPosition, textBgEnabled,textX,textY);
   const plainWithText = composedAscii;
   const textCss = `font-family:'Courier New',monospace;font-size:${textSize}px;line-height:.9;white-space:pre;color:${activeTextColor};background:${textBgEnabled ? activeTextBg : 'transparent'};padding:8px 12px;${text3d ? `text-shadow:1px 1px 0 ${text3dColor};` : ''}`;
   const downloadText = () => saveBlob(new Blob([plainWithText], { type: 'text/plain' }), 'txt');
@@ -325,8 +330,8 @@ function App() {
     let body = '';
     cells.forEach((c, i) => { body += `<span${colorMode ? ` style=\"color:${c.color}\"` : ''}>${c.char === ' ' ? '&nbsp;' : c.char.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>${(i + 1) % columns === 0 ? '\n' : ''}`; });
     const safeText = asciiText.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    const caption = asciiText ? `<pre class=\"caption ${textPosition}\" style=\"${textCss}\">${safeText}</pre>` : '';
-    const html = `<!doctype html><meta charset=\"utf-8\"><title>Glypheeeeee artwork</title><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:${bg};color:${fg}}.art{position:relative;width:max-content;min-width:${ascii ? 0 : 640}px;min-height:${ascii ? 0 : 240}px}.caption{position:absolute;left:50%;transform:translateX(-50%);z-index:2;white-space:nowrap}.caption.top{top:18px}.caption.center{top:50%;transform:translate(-50%,-50%)}.caption.bottom{bottom:18px}pre{font:8px/.86 monospace;letter-spacing:-.08em;margin:0}</style><div class=\"art\">${caption}<pre>${body}</pre></div>`;
+    const caption = asciiText ? `<pre class=\"caption\" style=\"${textCss};left:${textX}%;top:${textY}%;transform:translate(-${textX}%,-${textY}%)\">${safeText}</pre>` : '';
+    const html = `<!doctype html><meta charset=\"utf-8\"><title>Glypheeeeee artwork</title><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:${bg};color:${fg}}.art{position:relative;width:max-content;min-width:${ascii ? 0 : 640}px;min-height:${ascii ? 0 : 240}px}.caption{position:absolute;z-index:2;white-space:nowrap}pre{font:8px/.86 monospace;letter-spacing:-.08em;margin:0}</style><div class=\"art\">${caption}<pre>${body}</pre></div>`;
     saveBlob(new Blob([html], { type: 'text/html' }), 'html');
   };
   const downloadPng = () => {
@@ -341,8 +346,8 @@ function App() {
     if (asciiText) {
       ctx.font = `${textSize}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       const blockHeight = bannerLines.length * textSize * .9;
-      const startY = textPosition === 'top' ? 24 : textPosition === 'center' ? (canvas.height - blockHeight) / 2 : canvas.height - blockHeight - 24;
-      const maxChars = Math.max(...bannerLines.map(value => value.length)), startX = (canvas.width - maxChars * textSize * .6) / 2;
+      const startY = (canvas.height-blockHeight)*textY/100;
+      const maxChars = Math.max(...bannerLines.map(value => value.length)), startX = (canvas.width - maxChars * textSize * .6)*textX/100;
       if (textBgEnabled) { ctx.fillStyle = activeTextBg; ctx.fillRect(startX - 10, startY - 8, maxChars * textSize * .6 + 20, blockHeight + 16); }
       bannerLines.forEach((value, row) => [...value].forEach((char, col) => {
         if (char === ' ') return;
@@ -363,7 +368,7 @@ function App() {
     if (!hasOutput) return;
     const targetColumns=copyTargets[copyTarget].columns;
     const copyImageAscii=renderImage?renderAsciiAt(renderImage,targetColumns).out:'';
-    const copyComposed=composeAsciiLayers(copyImageAscii,asciiText,textPosition,textBgEnabled);
+    const copyComposed=composeAsciiLayers(copyImageAscii,asciiText,textPosition,textBgEnabled,textX,textY);
     const font = wordFont;
     const foreground = background === 'dark' ? '#f1efe8' : '#151512';
     const bg = background === 'dark' ? '#151512' : '#ffffff';
@@ -405,7 +410,7 @@ function App() {
           {subjectAnalysis && <><div className="subject-heading"><span>SUBJECT TYPES</span><small>{subjectAnalysis.components.length}/5 types · {subjectLayers.length}/10 placed</small></div><div className="subject-list">{subjectAnalysis.components.map((subject,index) => <div className="subject-source" key={subject.label}><button disabled={subjectLayers.length>=10} onClick={() => addSubjectLayer(subject.label)} title="Add one instance"><img src={subject.preview}/><span>+</span><em>S{index+1}</em></button><button className="remove-source" onClick={()=>removeSubjectSource(subject.label)} title="Remove subject type"><X size={10}/></button></div>)}</div>
             <input ref={subjectFileInput} type="file" accept="image/*" multiple hidden onChange={e=>addSubjectSources(e.target.files)}/><button className="add-source" disabled={detecting||subjectAnalysis.components.length>=5} onClick={()=>subjectFileInput.current?.click()}><ImagePlus size={13}/>{subjectAnalysis.components.length>=5?'5 SUBJECT TYPES ADDED':'ADD DIFFERENT SUBJECT IMAGE'}</button>
             <div className="canvas-editor"><div className="subject-heading"><span>COMPOSITION CANVAS</span><small>{subjectCanvasWidth} × {subjectCanvasHeight}</small></div><div className="canvas-presets">{['square','portrait','landscape','wide'].map(preset=><button key={preset} onClick={()=>setCanvasPreset(preset)}>{preset}</button>)}</div><label><span>Canvas width</span><output>{subjectCanvasWidth}px</output><input type="range" min="320" max="2000" step="20" value={subjectCanvasWidth} onChange={e=>setSubjectCanvasWidth(Number(e.target.value))}/></label><label><span>Canvas height</span><output>{subjectCanvasHeight}px</output><input type="range" min="320" max="2000" step="20" value={subjectCanvasHeight} onChange={e=>setSubjectCanvasHeight(Number(e.target.value))}/></label><p>Instance X and Y positions use the complete canvas area.</p></div>
-            <div className="layer-list">{subjectLayers.map((layer,index) => <div className="subject-layer" key={layer.id}><div className="layer-title"><b>INSTANCE {index+1}</b><span>S{subjectAnalysis.components.findIndex(subject=>subject.label===layer.label)+1}</span><button disabled={subjectLayers.length>=10} onClick={()=>duplicateSubjectLayer(layer.id)}>Duplicate</button><button onClick={()=>removeSubjectLayer(layer.id)}><X size={12}/></button></div><label><span>X position</span><output>{layer.x}%</output><input type="range" min="0" max="100" value={layer.x} onChange={e=>updateSubjectLayer(layer.id,{x:Number(e.target.value)})}/></label><label><span>Y position</span><output>{layer.y}%</output><input type="range" min="0" max="100" value={layer.y} onChange={e=>updateSubjectLayer(layer.id,{y:Number(e.target.value)})}/></label><label><span>Scale</span><output>{layer.scale}%</output><input type="range" min="25" max="200" value={layer.scale} onChange={e=>updateSubjectLayer(layer.id,{scale:Number(e.target.value)})}/></label></div>)}</div>
+            <div className="layer-list">{subjectLayers.map((layer,index) => <div className="subject-layer" key={layer.id}><div className="layer-title"><b>INSTANCE {index+1}</b><span>S{subjectAnalysis.components.findIndex(subject=>subject.label===layer.label)+1}</span><small>{getLayerSize(layer).join(' × ')}px</small><button disabled={subjectLayers.length>=10} onClick={()=>duplicateSubjectLayer(layer.id)}>Duplicate</button><button onClick={()=>removeSubjectLayer(layer.id)}><X size={12}/></button></div><label><span>X position</span><output>{layer.x}%</output><input type="range" min="0" max="100" value={layer.x} onChange={e=>updateSubjectLayer(layer.id,{x:Number(e.target.value)})}/></label><label><span>Y position</span><output>{layer.y}%</output><input type="range" min="0" max="100" value={layer.y} onChange={e=>updateSubjectLayer(layer.id,{y:Number(e.target.value)})}/></label><label><span>Scale</span><output>{layer.scale}%</output><input type="range" min="25" max="200" value={layer.scale} onChange={e=>updateSubjectLayer(layer.id,{scale:Number(e.target.value)})}/></label></div>)}</div>
           </>}
           <p className="subject-note">Detection runs privately on this device. The first run downloads and caches the model.</p>
         </div>}
@@ -418,8 +423,9 @@ function App() {
         <div className="text-style-grid">{[['plain','Plain'],['bold','Bold'],['italic','Italic'],['boldItalic','Bold italic']].map(([key,label]) => <button key={key} className={textStyle === key ? 'active' : ''} onClick={() => setTextStyle(key)}>{label}</button>)}</div>
         <button className="palette-toggle" disabled={!colorMode} onClick={() => setPaletteOpen(true)}><span>Color palette</span><i style={{ background:textColor }}/><i style={{ background:textBg }}/><i style={{ background:text3dColor }}/></button>
         {colorMode && paletteOpen && <div className="color-palette"><div className="palette-head"><span>TEXT COLORS</span><button onClick={() => setPaletteOpen(false)} aria-label="Close color palette"><X size={15}/></button></div><div className="text-options"><label><span>Text</span><input type="color" value={textColor} onChange={e => setTextColor(e.target.value)}/></label><label><span>Background</span><input type="color" value={textBg} onChange={e => setTextBg(e.target.value)}/></label><label><span>3D highlight</span><input type="color" value={text3dColor} onChange={e => setText3dColor(e.target.value)}/></label><label><span>3D depth</span><input type="color" value={text3dDepthColor} onChange={e => setText3dDepthColor(e.target.value)}/></label></div></div>}
-        <div className="position-switch">{['top','center','bottom'].map(pos => <button key={pos} className={textPosition === pos ? 'active' : ''} onClick={() => setTextPosition(pos)}>{pos}</button>)}</div>
-        <Slider label="Text size" value={textSize} min={12} max={52} unit="px" onChange={setTextSize}/>
+        <div className="position-switch">{['top','center','bottom'].map(pos => <button key={pos} className={textPosition === pos ? 'active' : ''} onClick={() => setTextPreset(pos)}>{pos}</button>)}</div>
+        <Slider label="Text X position" value={textX} min={0} max={100} unit="%" onChange={value=>{setTextX(value);setTextPosition('custom')}}/><Slider label="Text Y position" value={textY} min={0} max={100} unit="%" onChange={value=>{setTextY(value);setTextPosition('custom')}}/>
+        <Slider label="Text size" value={textSize} min={4} max={52} unit="px" onChange={setTextSize}/>
         <label className="toggle compact"><span><b>Text background</b><small>Add a readable block behind text</small></span><input type="checkbox" checked={textBgEnabled} onChange={e => setTextBgEnabled(e.target.checked)}/><i/></label>
         <label className="toggle secondary"><span><b>3D text</b><small>Layered dimensional shadow</small></span><input type="checkbox" checked={text3d} onChange={e => setText3d(e.target.checked)}/><i/></label>
         <div className="control-head spaced"><span>CHARACTER SET</span></div><div className="ramp-grid">{Object.keys(RAMPS).map(name => <button className={ramp === name ? 'active' : ''} onClick={() => setRamp(name)} key={name}><b>{name}</b><small>{RAMPS[name].slice(0, 10)}</small></button>)}</div>
@@ -434,7 +440,7 @@ function App() {
       </aside>
 
       <div className="output" id="result"><div className="output-bar"><span>OUTPUT / {ascii ? `${columns} × ${rows}` : 'TEXT CANVAS'}</span><div><button className="word-copy" disabled={!hasOutput} onClick={copyOutput}>{copied ? <Check size={14}/> : <Copy size={14}/>}<span>{copied ? 'Copied' : `Copy for ${copyTargets[copyTarget].label}`}</span></button><button disabled={!hasOutput} onClick={downloadPng}><Download size={14}/><span>PNG</span></button><button disabled={!hasOutput} onClick={downloadHtml}><FileCode2 size={14}/><span>HTML</span></button></div></div>
-        <div className={`ascii-frame ${background === 'dark' ? 'dark' : ''} ${colorMode ? 'is-color' : 'is-mono'} ${imageMode === 'subjects' ? 'subject-canvas' : ''}`}>{hasOutput ? <div className={`ascii-stage ${!ascii ? 'text-only' : ''}`}><pre className={`text-overlay ${textPosition} ${text3d ? 'three-d' : ''}`} style={{ color: activeTextColor, background: textBgEnabled ? activeTextBg : 'transparent', fontSize: `${textSize}px`, '--3d-highlight': text3dColor, '--3d-depth': text3dDepthColor }}>{asciiText.split('\n').map((line, row) => <span className="banner-line" key={row}>{[...line].map((char, col) => <span className={char === '#' ? 'depth' : ''} key={col}>{char}</span>)}{row < asciiText.split('\n').length - 1 && '\n'}</span>)}</pre>{ascii && <div className="ascii-art" style={{ '--cols': columns, '--glyph-size': `${fontSize}px` }}>{cells.map((cell, i) => <span key={i} style={colorMode ? { color: cell.color } : undefined}>{cell.char === ' ' ? '\u00a0' : cell.char}</span>)}</div>}</div> : <div className="empty"><Maximize2/><p>Add an image or write text<br/>to begin creating.</p></div>}</div>
+        <div className={`ascii-frame ${background === 'dark' ? 'dark' : ''} ${colorMode ? 'is-color' : 'is-mono'} ${imageMode === 'subjects' ? 'subject-canvas' : ''}`}>{hasOutput ? <div className={`ascii-stage ${!ascii ? 'text-only' : ''}`}><div className="canvas-size-badge">{imageMode==='subjects'?`${subjectCanvasWidth} × ${subjectCanvasHeight} canvas`:`${columns} × ${rows} grid`}</div><pre className={`text-overlay ${text3d ? 'three-d' : ''}`} style={{ color: activeTextColor, background: textBgEnabled ? activeTextBg : 'transparent', fontSize: `${textSize}px`, left:`${textX}%`, top:`${textY}%`, transform:`translate(-${textX}%,-${textY}%)`, '--3d-highlight': text3dColor, '--3d-depth': text3dDepthColor }}>{asciiText.split('\n').map((line, row) => <span className="banner-line" key={row}>{[...line].map((char, col) => <span className={char === '#' ? 'depth' : ''} key={col}>{char}</span>)}{row < asciiText.split('\n').length - 1 && '\n'}</span>)}</pre>{ascii && <div className="ascii-art" style={{ '--cols': columns, '--glyph-size': `${fontSize}px` }}>{cells.map((cell, i) => <span key={i} style={colorMode ? { color: cell.color } : undefined}>{cell.char === ' ' ? '\u00a0' : cell.char}</span>)}</div>}</div> : <div className="empty"><Maximize2/><p>Add an image or write text<br/>to begin creating.</p></div>}</div>
         <div className="status"><span><i className={hasOutput ? 'ready' : ''}/>{hasOutput ? `${colorMode ? 'COLOR' : 'MONO'} RENDER COMPLETE` : 'AWAITING CONTENT'}</span><button disabled={!hasOutput} onClick={downloadText}>PLAIN .TXT ↓</button></div>
       </div></div></section>
 
