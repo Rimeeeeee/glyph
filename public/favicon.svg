@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="10" fill="#151512"/>
+  <g fill="#f2f0e9" font-family="ui-monospace,Consolas,monospace" font-size="10" font-weight="700">
+    <text x="14" y="17">@@@@</text>
+    <text x="10" y="28">@@</text>
+    <text x="10" y="39">@@ @@@</text>
+    <text x="10" y="50">@@  @@</text>
+    <text x="14" y="60">@@@@</text>
+  </g>
+</svg>
