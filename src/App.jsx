@@ -72,6 +72,7 @@ function Slider({ label, value, min, max, step = 1, unit = '', onChange }) {
 
 function App() {
   const [image, setImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
   const [fileName, setFileName] = useState('');
   const [ascii, setAscii] = useState('');
   const [cells, setCells] = useState([]);
@@ -153,9 +154,13 @@ function App() {
   const loadFile = file => {
     if (!file?.type.startsWith('image/')) return;
     const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => { setImage(img); setFileName(file.name); URL.revokeObjectURL(url); };
-    img.src = url;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      img.onload = () => { setImage(img); setImagePreview(dataUrl); setFileName(file.name); };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
   };
   const saveBlob = (blob, suffix) => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -232,7 +237,7 @@ function App() {
     if (copyTargets[target].font) setWordFont(copyTargets[target].font);
   };
   const reset = () => { setColumns(96); setContrast(1.25); setBrightness(0); setGamma(1); setSaturation(115); setEdge(0); setFontScale(100); setInvert(false); setDither(true); setColorMode(false); setBackground('light'); setRamp('Classic'); setCopyTarget('markdown'); setWordFont(10); };
-  const clear = () => { setImage(null); setAscii(''); setCells([]); setRows(0); };
+  const clear = () => { setImage(null); setImagePreview(''); setAscii(''); setCells([]); setRows(0); };
   const fontSize = clamp(920 / columns, 4.4, 11) * fontScale / 100;
 
   return <main>
@@ -244,7 +249,7 @@ function App() {
       <div className="workbench"><aside className="controls">
         <div className="control-head"><span>INPUT</span>{image && <button onClick={clear}><X size={14}/> clear</button>}</div>
         <input ref={fileInput} type="file" accept="image/*" hidden onChange={e => loadFile(e.target.files[0])}/>
-        <button className={`dropzone ${dragging ? 'dragging' : ''}`} onClick={() => fileInput.current?.click()} onDragOver={e => {e.preventDefault(); setDragging(true)}} onDragLeave={() => setDragging(false)} onDrop={e => {e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0])}}>{image ? <><img src={image.src}/><span className="file-chip">{fileName}</span></> : <><ImagePlus/><strong>ADD A PORTRAIT</strong><small>Tap to browse · JPG, PNG, WEBP</small></>}</button>
+        <button className={`dropzone ${dragging ? 'dragging' : ''}`} onClick={() => fileInput.current?.click()} onDragOver={e => {e.preventDefault(); setDragging(true)}} onDragLeave={() => setDragging(false)} onDrop={e => {e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0])}}>{image ? <><img src={imagePreview}/><span className="file-chip">{fileName}</span></> : <><ImagePlus/><strong>ADD A PORTRAIT</strong><small>Tap to browse · JPG, PNG, WEBP</small></>}</button>
 
         <div className="control-head spaced"><span>RENDER STYLE</span></div>
         <div className="mode-switch"><button className={!colorMode ? 'active' : ''} onClick={() => setColorMode(false)}>Monochrome</button><button className={colorMode ? 'active color' : ''} onClick={() => setColorMode(true)}>Full color</button></div>
@@ -260,7 +265,7 @@ function App() {
         <label className="toggle secondary"><span><b>3D text</b><small>Layered dimensional shadow</small></span><input type="checkbox" checked={text3d} onChange={e => setText3d(e.target.checked)}/><i/></label>
         <div className="control-head spaced"><span>CHARACTER SET</span></div><div className="ramp-grid">{Object.keys(RAMPS).map(name => <button className={ramp === name ? 'active' : ''} onClick={() => setRamp(name)} key={name}><b>{name}</b><small>{RAMPS[name].slice(0, 10)}</small></button>)}</div>
         <div className="control-head spaced"><span>IMAGE TUNING</span><button onClick={reset}><RotateCcw size={13}/> reset</button></div>
-        <Slider label="Detail" value={columns} min={32} max={180} unit=" cols" onChange={setColumns}/><Slider label="Contrast" value={contrast} min={.5} max={2.5} step={.05} onChange={setContrast}/><Slider label="Brightness" value={brightness} min={-40} max={40} onChange={setBrightness}/><Slider label="Gamma" value={gamma} min={.4} max={2} step={.05} onChange={setGamma}/><Slider label="Edge definition" value={edge} min={0} max={100} unit="%" onChange={setEdge}/>{colorMode && <Slider label="Color intensity" value={saturation} min={0} max={200} unit="%" onChange={setSaturation}/>}<Slider label="Glyph size" value={fontScale} min={70} max={150} unit="%" onChange={setFontScale}/>
+        <Slider label="Detail" value={columns} min={32} max={180} unit=" cols" onChange={setColumns}/><Slider label="Contrast" value={contrast} min={.5} max={2.5} step={.05} onChange={setContrast}/><Slider label="Brightness" value={brightness} min={-40} max={40} onChange={setBrightness}/><Slider label="Gamma" value={gamma} min={.4} max={2} step={.05} onChange={setGamma}/><Slider label="Edge definition" value={edge} min={0} max={100} unit="%" onChange={setEdge}/>{colorMode && <Slider label="Color intensity" value={saturation} min={0} max={200} unit="%" onChange={setSaturation}/>}<Slider label="Rendered ASCII zoom" value={fontScale} min={40} max={300} step={5} unit="%" onChange={setFontScale}/>
         <label className="toggle"><span><b>Invert density</b><small>Reverse light and dense characters</small></span><input type="checkbox" checked={invert} onChange={e => setInvert(e.target.checked)}/><i/></label>
         <label className="toggle secondary"><span><b>Preserve fine tones</b><small>Dithering keeps detail at copy-safe sizes</small></span><input type="checkbox" checked={dither} onChange={e => setDither(e.target.checked)}/><i/></label>
         <div className="control-head spaced"><span>COPY DESTINATION</span></div>
