@@ -3,3 +3,6 @@ dist/
 .agents/
 *.log
 .DS_Store
+hs.rs
+exp.md
+exp,md
